@@ -3,8 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL as string
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
-if (!url || !key) {
-  console.warn('Supabase env vars not set — cloud sync disabled.')
-}
+export const supabaseConfigured = Boolean(url && key)
 
-export const supabase = createClient(url ?? '', key ?? '')
+// Fall back to placeholder values so createClient never throws —
+// all requests will simply fail (and be swallowed) when not configured.
+export const supabase = createClient(
+  url || 'https://placeholder.supabase.co',
+  key || 'placeholder-key'
+)
