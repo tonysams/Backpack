@@ -8,6 +8,23 @@ async function getUserId(): Promise<string | null> {
   return user?.id ?? null
 }
 
+// ─── Push all local data to Supabase (first-login migration) ─────────────────
+// Must run in dependency order: gear → trips → packing_lists → items → contacts
+
+export async function pushAllToSupabase(state: {
+  gearItems: import('../types').GearItem[]
+  trips: import('../types').Trip[]
+  packingLists: import('../types').PackingList[]
+  packingListItems: import('../types').PackingListItem[]
+  emergencyContacts: import('../types').EmergencyContact[]
+}) {
+  for (const g of state.gearItems)         await db.gearItems.upsert(g)
+  for (const t of state.trips)             await db.trips.upsert(t)
+  for (const l of state.packingLists)      await db.packingLists.upsert(l)
+  for (const i of state.packingListItems)  await db.packingListItems.upsert(i)
+  for (const c of state.emergencyContacts) await db.emergencyContacts.upsert(c)
+}
+
 // ─── Fetch all user data ──────────────────────────────────────────────────────
 
 export async function fetchAllUserData() {

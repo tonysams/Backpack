@@ -33,16 +33,16 @@ export default function App() {
   const { user, loading, signOut } = useAuth()
   const prevUserId = useRef<string | null>(null)
 
-  // Sync from Supabase whenever the user signs in
+  // Sync from Supabase on login, then seed defaults if still empty
   useEffect(() => {
     if (user && user.id !== prevUserId.current) {
       prevUserId.current = user.id
-      syncFromSupabase()
+      syncFromSupabase().then(() => seedDefaultGear())
     }
     if (!user) {
       prevUserId.current = null
     }
-  }, [user, syncFromSupabase])
+  }, [user, syncFromSupabase, seedDefaultGear])
 
   // Seed default gear for guest users
   useEffect(() => {

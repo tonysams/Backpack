@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AppState, Trip, PackingList, PackingListItem, GearItem, EmergencyContact } from '../types'
 import { defaultGear } from '../data/defaultGear'
-import { db, fetchAllUserData } from '../lib/db'
+import { db, fetchAllUserData, pushAllToSupabase } from '../lib/db'
 
 const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
@@ -22,9 +22,23 @@ export const useStore = create<AppState>()(
       // ── Cloud sync ─────────────────────────────────────────────────────────
 
       syncFromSupabase: async () => {
-        const data = await fetchAllUserData()
-        // Replace local state with cloud data; mark seeded so default gear isn't re-added
-        set({ ...data, seeded: true })
+        const cloudData = await fetchAllUserData()
+        const cloudHasData = cloudData.gearItems.length > 0 || cloudData.trips.length > 0
+
+        if (cloudHasData) {
+          // Cloud is the source of truth — hydrate local state from it
+          set({ ...cloudData, seeded: true })
+        } else {
+          // Cloud is empty — migrate whatever is already in local state up to Supabase
+          // (handles first login after using the app as a guest)
+          const local = get()
+          const localHasData = local.gearItems.length > 0 || local.trips.length > 0
+          if (localHasData) {
+            await pushAllToSupabase(local)
+          }
+          // Either way mark seeded so we don't overwrite with defaults on next render
+          set({ seeded: true })
+        }
       },
 
       clearUserData: () => {
@@ -48,6 +62,8 @@ export const useStore = create<AppState>()(
         if (seeded || gearItems.length > 0) return
         const items: GearItem[] = defaultGear.map(g => ({ ...g, id: uid(), createdDate: now() }))
         set({ gearItems: items, seeded: true })
+        // Also push defaults to Supabase if the user is logged in
+        items.forEach(item => db.gearItems.upsert(item))
       },
 
       // ── Trips ──────────────────────────────────────────────────────────────
@@ -62,8 +78,8 @@ export const useStore = create<AppState>()(
           packingLists: [...s.packingLists, list],
           activeTripId: tripId,
         }))
-        db.trips.upsert(trip)
-        db.packingLists.upsert(list)
+        // Chain: packing_lists has a FK to trips so trip must exist first
+        db.trips.upsert(trip).then(() => db.packingLists.upsert(list))
       },
 
       updateTrip: (id, updates) => {
