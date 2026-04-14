@@ -1,6 +1,13 @@
 import { supabase } from './supabase'
 import type { GearItem, Trip, PackingList, PackingListItem, EmergencyContact } from '../types'
 
+// ─── Current user ID ──────────────────────────────────────────────────────────
+
+async function getUserId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
+
 // ─── Fetch all user data ──────────────────────────────────────────────────────
 
 export async function fetchAllUserData() {
@@ -25,34 +32,49 @@ export async function fetchAllUserData() {
 
 export const db = {
   gearItems: {
-    upsert: (item: GearItem) =>
-      supabase.from('gear_items').upsert(toDbGear(item)).then(noop),
+    upsert: async (item: GearItem) => {
+      const uid = await getUserId()
+      if (!uid) return
+      await supabase.from('gear_items').upsert({ ...toDbGear(item), user_id: uid })
+    },
     delete: (id: string) =>
-      supabase.from('gear_items').delete().eq('id', id).then(noop),
+      supabase.from('gear_items').delete().eq('id', id),
   },
   trips: {
-    upsert: (trip: Trip) =>
-      supabase.from('trips').upsert(toDbTrip(trip)).then(noop),
+    upsert: async (trip: Trip) => {
+      const uid = await getUserId()
+      if (!uid) return
+      await supabase.from('trips').upsert({ ...toDbTrip(trip), user_id: uid })
+    },
     delete: (id: string) =>
-      supabase.from('trips').delete().eq('id', id).then(noop),
+      supabase.from('trips').delete().eq('id', id),
   },
   packingLists: {
-    upsert: (list: PackingList) =>
-      supabase.from('packing_lists').upsert(toDbList(list)).then(noop),
+    upsert: async (list: PackingList) => {
+      const uid = await getUserId()
+      if (!uid) return
+      await supabase.from('packing_lists').upsert({ ...toDbList(list), user_id: uid })
+    },
     delete: (id: string) =>
-      supabase.from('packing_lists').delete().eq('id', id).then(noop),
+      supabase.from('packing_lists').delete().eq('id', id),
   },
   packingListItems: {
-    upsert: (item: PackingListItem) =>
-      supabase.from('packing_list_items').upsert(toDbItem(item)).then(noop),
+    upsert: async (item: PackingListItem) => {
+      const uid = await getUserId()
+      if (!uid) return
+      await supabase.from('packing_list_items').upsert({ ...toDbItem(item), user_id: uid })
+    },
     delete: (id: string) =>
-      supabase.from('packing_list_items').delete().eq('id', id).then(noop),
+      supabase.from('packing_list_items').delete().eq('id', id),
   },
   emergencyContacts: {
-    upsert: (contact: EmergencyContact) =>
-      supabase.from('emergency_contacts').upsert(toDbContact(contact)).then(noop),
+    upsert: async (contact: EmergencyContact) => {
+      const uid = await getUserId()
+      if (!uid) return
+      await supabase.from('emergency_contacts').upsert({ ...toDbContact(contact), user_id: uid })
+    },
     delete: (id: string) =>
-      supabase.from('emergency_contacts').delete().eq('id', id).then(noop),
+      supabase.from('emergency_contacts').delete().eq('id', id),
   },
 }
 
@@ -113,5 +135,3 @@ function toDbContact(c: EmergencyContact): Row {
 function fromDbContact(r: Row): EmergencyContact {
   return { id: r.id, tripId: r.trip_id, name: r.name, phone: r.phone, relationship: r.relationship, createdDate: r.created_date }
 }
-
-function noop() { /* swallow errors — store already updated locally */ }
