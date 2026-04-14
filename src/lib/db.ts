@@ -4,8 +4,9 @@ import type { GearItem, Trip, PackingList, PackingListItem, EmergencyContact } f
 // ─── Current user ID ──────────────────────────────────────────────────────────
 
 async function getUserId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.id ?? null
+  // getSession reads from local cache — no network call needed
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.user?.id ?? null
 }
 
 // ─── Push all local data to Supabase (first-login migration) ─────────────────
@@ -47,51 +48,41 @@ export async function fetchAllUserData() {
 
 // ─── Upsert helpers (fire-and-forget from store) ─────────────────────────────
 
+async function dbUpsert(table: string, row: Row) {
+  const uid = await getUserId()
+  if (!uid) {
+    console.warn(`[DB] skipping upsert on ${table} — no active session`)
+    return
+  }
+  const { error } = await supabase.from(table).upsert({ ...row, user_id: uid })
+  if (error) console.error(`[DB] upsert failed on ${table}:`, error.message, row)
+}
+
+async function dbDelete(table: string, id: string) {
+  const { error } = await supabase.from(table).delete().eq('id', id)
+  if (error) console.error(`[DB] delete failed on ${table}:`, error.message, id)
+}
+
 export const db = {
   gearItems: {
-    upsert: async (item: GearItem) => {
-      const uid = await getUserId()
-      if (!uid) return
-      await supabase.from('gear_items').upsert({ ...toDbGear(item), user_id: uid })
-    },
-    delete: (id: string) =>
-      supabase.from('gear_items').delete().eq('id', id),
+    upsert: (item: GearItem)         => dbUpsert('gear_items', toDbGear(item)),
+    delete: (id: string)             => dbDelete('gear_items', id),
   },
   trips: {
-    upsert: async (trip: Trip) => {
-      const uid = await getUserId()
-      if (!uid) return
-      await supabase.from('trips').upsert({ ...toDbTrip(trip), user_id: uid })
-    },
-    delete: (id: string) =>
-      supabase.from('trips').delete().eq('id', id),
+    upsert: (trip: Trip)             => dbUpsert('trips', toDbTrip(trip)),
+    delete: (id: string)             => dbDelete('trips', id),
   },
   packingLists: {
-    upsert: async (list: PackingList) => {
-      const uid = await getUserId()
-      if (!uid) return
-      await supabase.from('packing_lists').upsert({ ...toDbList(list), user_id: uid })
-    },
-    delete: (id: string) =>
-      supabase.from('packing_lists').delete().eq('id', id),
+    upsert: (list: PackingList)      => dbUpsert('packing_lists', toDbList(list)),
+    delete: (id: string)             => dbDelete('packing_lists', id),
   },
   packingListItems: {
-    upsert: async (item: PackingListItem) => {
-      const uid = await getUserId()
-      if (!uid) return
-      await supabase.from('packing_list_items').upsert({ ...toDbItem(item), user_id: uid })
-    },
-    delete: (id: string) =>
-      supabase.from('packing_list_items').delete().eq('id', id),
+    upsert: (item: PackingListItem)  => dbUpsert('packing_list_items', toDbItem(item)),
+    delete: (id: string)             => dbDelete('packing_list_items', id),
   },
   emergencyContacts: {
-    upsert: async (contact: EmergencyContact) => {
-      const uid = await getUserId()
-      if (!uid) return
-      await supabase.from('emergency_contacts').upsert({ ...toDbContact(contact), user_id: uid })
-    },
-    delete: (id: string) =>
-      supabase.from('emergency_contacts').delete().eq('id', id),
+    upsert: (contact: EmergencyContact) => dbUpsert('emergency_contacts', toDbContact(contact)),
+    delete: (id: string)                => dbDelete('emergency_contacts', id),
   },
 }
 

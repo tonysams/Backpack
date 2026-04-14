@@ -11,3 +11,5 @@ export const supabase = createClient(
   url || 'https://placeholder.supabase.co',
   key || 'placeholder-key'
 )
+
+console.log('[Supabase] URL:', url || '(not set — guest mode)')
