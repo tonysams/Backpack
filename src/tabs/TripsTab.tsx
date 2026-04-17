@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Plus, Map, Pencil, Trash2, ChevronRight, CheckCircle, Share2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Plus, Map, Pencil, Trash2, ChevronRight, CheckCircle, Share2, Upload } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatDate, formatWeight, itemWeight } from '../utils/weight'
 import { buildShareUrl } from '../utils/share'
+import { parseGpx, readFileAsText } from '../utils/gpx'
 import Modal from '../components/Modal'
 import type { Trip } from '../types'
 
@@ -254,6 +255,33 @@ function TripFormModal({ title, trip, onClose }: { title: string; trip?: Trip; o
   const [distance, setDistance] = useState(trip?.distance?.toString() ?? '')
   const [elevation, setElevation] = useState(trip?.elevation?.toString() ?? '')
   const [notes, setNotes] = useState(trip?.notes ?? '')
+  const [gpxError, setGpxError] = useState<string | null>(null)
+  const [gpxLoading, setGpxLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleGpxImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setGpxError(null)
+    setGpxLoading(true)
+    try {
+      const text = await readFileAsText(file)
+      const gpx = parseGpx(text)
+      setName(gpx.name)
+      setRoute(gpx.route)
+      if (gpx.distanceMiles > 0)    setDistance(gpx.distanceMiles.toString())
+      if (gpx.elevationGainFt > 0)  setElevation(gpx.elevationGainFt.toString())
+      if (gpx.waypointNames.length > 0) {
+        setNotes(gpx.waypointNames.join(', '))
+      }
+    } catch {
+      setGpxError('Could not read GPX file — make sure it\'s a valid .gpx export from Garmin Explore.')
+    } finally {
+      setGpxLoading(false)
+      // Reset input so the same file can be re-imported if needed
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const valid = name.trim().length > 0
 
@@ -291,6 +319,29 @@ function TripFormModal({ title, trip, onClose }: { title: string; trip?: Trip; o
       }
     >
       <div className="space-y-4">
+        {/* GPX Import */}
+        {!trip && (
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".gpx"
+              className="hidden"
+              onChange={handleGpxImport}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={gpxLoading}
+              className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-green-400 rounded-xl py-3 text-sm font-medium text-gray-400 hover:text-green-600 transition-colors"
+            >
+              <Upload size={15} />
+              {gpxLoading ? 'Reading file…' : 'Import from Garmin GPX file'}
+            </button>
+            {gpxError && <p className="text-xs text-red-500 mt-1.5">{gpxError}</p>}
+          </div>
+        )}
+
         <Field label="Trip Name *">
           <input className={inp} value={name} onChange={e => setName(e.target.value)} placeholder="High Sierra Loop" />
         </Field>
